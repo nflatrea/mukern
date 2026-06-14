@@ -1,0 +1,59 @@
+    ___       ___       ___       ___       ___       ___   
+   /\__\     /\__\     /\__\     /\  \     /\  \     /\__\  
+  /::L_L_   /:/ _/_   /:/ _/_   /::\  \   /::\  \   /:| _|_ 
+ /:/L:\__\ /:/_/\__\ /::-"\__\ /::\:\__\ /::\:\__\ /::|/\__\
+ \/_/:/  / \:\/:/  / \;:;-",-" \:\:\/  / \;:::/  / \/|::/  /
+   /:/  /   \::/  /   |:|  |    \:\/  /   |:\/__/    |:/  / 
+   \/__/     \/__/     \|__|     \/__/     \|__|     \/__/  
+                                      muKern v.1.0.062026
+
+A minimal microkernel design for x86_64, ARMv8-A and RV64, 
+plus a working proof-of-concept that boots on all three
+and drops you into a tiny serial REPL.
+
+INSTALL
+
+1. Build the container.
+
+    $ podman build -t osdev -f Containerfile .
+
+2. Build and run kernel.
+
+QEMU's serial is wired to your terminal.
+Quit QEMU with: Ctrl-A then x
+
+    $ podman run --rm -it -v "$PWD":/build:Z osdev sh
+
+    Verify toolchain
+
+    > aarch64-linux-gnu-gcc --version
+    > riscv64-linux-gnu-gcc --version
+    > qemu-system-x86_64 --version
+    > make all # or make ARCH=$(ARCH) build 
+    
+    Build based on $(ARCH) (ex. riscv64, x86_64, arm64).
+    The `:Z` suffix relabels the mount for SELinux hosts;
+    drop it if your host does not use SELinux.
+
+    Quitting QEMU
+    
+    All `run-*` targets use `-nographic`, which
+    multiplexes the QEMU monitor onto your terminal.
+    To exit: press Ctrl-A, release, then x. (Inside the 
+    REPL you can also type `halt` to park the CPU, then *
+    Ctrl-A x to close QEMU.)
+
+NOTES
+
+- No KVM needed. TCG emulation is intentional for 
+  portability; it is slower but works in any rootless 
+  container.
+- `-v "$PWD":/work:Z` - the `Z` is for SELinux relabeling.
+  On Debian/Ubuntu hosts without SELinux it is harmless;
+  on some setups you may prefer `:z` (shared) if multiple
+  containers touch the tree.
+- Apple Silicon / non-x86 hosts. The x86_64 target needs
+  host gcc to emit x86_64 code; on a non-x86 host, build 
+  the x86_64 kernel with an `x86_64-linux-gnu` cross
+  compiler instead and add it to the image. The arm64 and 
+  riscv64 targets are unaffected (they already cross-compile).

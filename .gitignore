@@ -1,0 +1,9 @@
+# build output
+/build/
+*.o
+*.elf
+*.elf64
+
+# editor cruft
+*~
+.*.swp

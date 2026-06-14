@@ -1,0 +1,68 @@
+    ___       ___       ___       ___       ___       ___   
+   /\__\     /\__\     /\__\     /\  \     /\  \     /\__\  
+  /::L_L_   /:/ _/_   /:/ _/_   /::\  \   /::\  \   /:| _|_ 
+ /:/L:\__\ /:/_/\__\ /::-"\__\ /::\:\__\ /::\:\__\ /::|/\__\
+ \/_/:/  / \:\/:/  / \;:;-",-" \:\:\/  / \;:::/  / \/|::/  /
+   /:/  /   \::/  /   |:|  |    \:\/  /   |:\/__/    |:/  / 
+   \/__/     \/__/     \|__|     \/__/     \|__|     \/__/  
+                                      muKern v.0.1.062026
+
+A minimal microkernel design for x86_64, ARMv8-A and RV64, 
+plus a working proof-of-concept that boots on all three
+and drops you into a tiny serial REPL.
+
+USAGE
+
+Toolchain setup (rootless container) is in INSTALL file. Once the
+cross compilers and QEMU are available:
+
+    $ make all              # build all three kernels
+    $ make run-x86_64       # boot in QEMU (-nographic)
+    $ make run-arm64
+    $ make run-riscv64
+
+Quit QEMU with Ctrl-A then x.
+
+muKern ships with a minimal REPL commande line
+
+---
+    SeaBIOS (version 1.16.3-debian-1.16.3-2)
+    iPXE (https://ipxe.org) 00:03.0 CA00 PCI2.10 PnP PMM+06FCAE00+06F0AE00 CA00
+                                                                               
+    Booting from ROM..
+        ___       ___       ___       ___       ___       ___      
+       /\__\     /\__\     /\__\     /\  \     /\  \     /\__\     
+      /::L_L_   /:/ _/_   /:/ _/_   /::\  \   /::\  \   /:| _|_    
+     /:/L:\__\ /:/_/\__\ /::-"\__\ /::\:\__\ /::\:\__\ /::|/\__\  
+     \/_/:/  / \:\/:/  / \;:;-",-" \:\:\/  / \;:::/  / \/|::/  / 
+       /:/  /   \::/  /   |:|  |    \:\/  /   |:\/__/    |:/  /    
+       \/__/     \/__/     \|__|     \/__/     \|__|     \/__/     
+                                          muKern v.0.1.062026      
+    arch: x86_64
+    type 'help' for commands
+
+    mukern> help
+    commands:
+      help          this list
+      arch          print architecture
+      echo <text>   print text
+      fault         raise a CPU exception (trap demo)
+      panic         call panic() directly
+      halt          stop the cpu
+
+    mukern>
+---
+
+NOTES
+
+Each targets uses a different load address and boot path,
+
+| arch    | boot path                          | UART                 | load addr  |
+|---------|------------------------------------|----------------------|------------|
+| x86_64  | Multiboot1 to long-mode trampoline | 16550 @ 0x3F8        | 1 MiB      |
+| arm64   | QEMU virt ELF entry (EL1)          | PL011 @ 0x9000000    | 0x40080000 |
+| riscv64 | OpenSBI to S-mode payload          | NS16550 @ 0x10000000 | 0x80200000 |
+
+The x86_64 kernel is linked as ELF64 and re-wrapped to `elf32-i386`
+with `objcopy` so QEMU's Multiboot loader accepts it; the machine code
+is unchanged.
