@@ -1,6 +1,9 @@
-/* arch/x86_64/serial.c - COM1 (8250/16550) via port I/O. */
+/* arch/x86_64/serial.c - COM1 (8250/16550) via port I/O.
+ * Raw UART back-end (hal.h). Owned at runtime by the serial driver server;
+ * also used directly by the boot banner and panic(). */
 #include <stdint.h>
-#include "console.h"
+#include "hal.h"
+#include "arch.h"
 
 #define COM1 0x3F8
 
@@ -16,7 +19,7 @@ static inline uint8_t inb(uint16_t port)
     return r;
 }
 
-void console_init(void)
+void uart_init(void)
 {
     outb(COM1 + 1, 0x00); /* disable interrupts        */
     outb(COM1 + 3, 0x80); /* enable DLAB               */
@@ -27,14 +30,14 @@ void console_init(void)
     outb(COM1 + 4, 0x0B); /* RTS/DSR set                */
 }
 
-void console_putc(char c)
+void uart_putc(char c)
 {
     while (!(inb(COM1 + 5) & 0x20)) /* wait THR empty */
         ;
     outb(COM1, (uint8_t)c);
 }
 
-int console_getc(void)
+int uart_getc(void)
 {
     if (!(inb(COM1 + 5) & 0x01)) /* data ready? */
         return -1;
@@ -42,6 +45,8 @@ int console_getc(void)
 }
 
 const char *arch_name(void) { return "x86_64"; }
+
+void arch_relax(void) { __asm__ volatile("pause"); }
 
 void arch_halt(void)
 {

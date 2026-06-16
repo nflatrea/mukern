@@ -1,37 +1,29 @@
-/** 
-file: main.c portable kernel entry.
-**/
-
-#include "console.h"
+/*
+file: main.c
+desc: Portable kernel entry. Its whole job is to make the three kernel
+      services usable and then get out of the way: bring up the emergency
+      UART console, install traps, start the task subsystem, create the init
+      task, and hand control to the scheduler. From sched_start() on, the
+      kernel only ever runs because some task invoked IPC or yielded -- all
+      policy (drivers, console, shell) lives in tasks.
+*/
+#include "task.h"
 #include "arch.h"
+#include "hal.h"
 #include "klib.h"
+#include "banner.h"
 
-#define MUKERN_VERSION "v.0.1.062026"
-
-void motd(void)
-{
-    kprintf ("\n    ___       ___       ___       ___       ___       ___      \n"
-             "   /\\__\\     /\\__\\     /\\__\\     /\\  \\     /\\  \\     /\\__\\     \n"    
-             "  /::L_L_   /:/ _/_   /:/ _/_   /::\\  \\   /::\\  \\   /:| _|_    \n"    
-             " /:/L:\\__\\ /:/_/\\__\\ /::-\"\\__\\ /::\\:\\__\\ /::\\:\\__\\ /::|/\\__\\  \n"   
-             " \\/_/:/  / \\:\\/:/  / \\;:;-\",-\" \\:\\:\\/  / \\;:::/  / \\/|::/  / \n"  
-             "   /:/  /   \\::/  /   |:|  |    \\:\\/  /   |:\\/__/    |:/  /    \n"    
-             "   \\/__/     \\/__/     \\|__|     \\/__/     \\|__|     \\/__/     \n"    
-             "                                      muKern " MUKERN_VERSION "\n");
-
-    kprintf("arch: %s\n", arch_name());
-}
-
-void repl(void); /* kernel/core/repl.c */
+void init_task(void *arg);   /* kernel/core/init.c */
 
 void kmain(void)
 {
-    console_init();
-    arch_traps_init();   /* M1: catch CPU exceptions instead of triple-faulting */
+    uart_init();             /* emergency console for boot + panic           */
+    arch_traps_init();       /* M1: catch CPU exceptions, don't triple-fault */
 
-    
-    motd();
-    repl();
-    kprintf("Goodbye.");
-    arch_halt();
+    /* Early sign of life, straight to the UART (no scheduler/IPC yet). */
+    kprintf("muKern %s booting on %s\n", MUKERN_VERSION, arch_name());
+
+    task_init();                                  /* M2: tasks + scheduler   */
+    task_create(init_task, NULL, "init");         /* M5: root task           */
+    sched_start();                                /* never returns           */
 }

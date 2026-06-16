@@ -1,16 +1,22 @@
 /*
-file: panic.c 
+file: panic.c
+desc: Last-resort error path. Prints straight to the UART (never via IPC --
+      the thing that broke might BE a server) and parks the CPU.
 */
+#include <stdarg.h>
 #include "klib.h"
-#include "console.h"
+#include "arch.h"
 
 void panic(const char *fmt, ...)
 {
+    char buf[256];
     va_list ap;
     va_start(ap, fmt);
-    kprintf("\n*** KERNEL PANIC: ");
-    kvprintf(fmt, ap);
+    kvsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
-    kprintf(" ***\n");
+
+    kputs("\n*** KERNEL PANIC: ");
+    kputs(buf);
+    kputs(" ***\n");
     arch_halt();
 }

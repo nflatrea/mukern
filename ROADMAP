@@ -1,0 +1,85 @@
+muKern ROADMAP
+==============
+
+muKern is built in milestones. Each one is small, self-contained, and
+leaves a kernel that still boots and runs on all three architectures.
+
+DONE
+----
+
+M0  Boot on three arches.
+    x86_64 (Multiboot -> long mode), arm64 (QEMU virt, EL1), riscv64
+    (OpenSBI -> S-mode). One UART per arch brought up by hand.
+
+M1  Traps / exceptions.
+    IDT on x86_64, VBAR_EL1 on arm64, stvec on riscv64. A synchronous
+    fault dumps registers and panics instead of triple-faulting. The
+    shell's `fault` command exercises this.
+
+M2  Tasks & cooperative scheduler.
+    Fixed table of tasks, each with its own stack and saved context.
+    Per-arch context switch (arch/<arch>/switch.S + ctx.c). Round-robin
+    pick with a never-blocking idle task so the run queue is never empty.
+
+M3  Synchronous IPC.
+    send / recv / call / reply. Blocking rendezvous, no kernel-side
+    buffering (the L4 discipline). Fixed-size messages: a few words plus
+    an optional (ptr,len). call/reply give RPC; the server loop is just
+    recv -> handle -> reply.
+
+M4  Driver servers.
+    The UART driver becomes a task (kernel/srv/serial.c) that owns the
+    port and speaks the con.h protocol. The kernel core stops touching
+    devices entirely (only the boot banner and panic still write the UART
+    directly, because they must work without the scheduler).
+
+M5  Console multiplexer, init, and shell-as-task.
+    A console server (kernel/srv/console.c) fans one client stream out to
+    every device. The init/root task (kernel/core/init.c) starts the
+    servers, publishes their endpoints, and launches the shell. The shell
+    (kernel/core/repl.c) is now a plain client task that knows only con.h.
+
+M6  VGA text driver (x86_64).
+    arch/x86_64/vga.c drives the 80x25 buffer at 0xB8000; kernel/srv/vga.c
+    wraps it as a con.h server. The console server now writes to serial
+    AND screen, so the shell demos on a real display (docs/vga-demo.png).
+
+M7  PS/2 keyboard & input multiplexing -- a real local console (x86_64).
+    arch/x86_64/kbd.c polls the i8042 and translates scan-code set 1 to
+    ASCII (shift + caps); kernel/srv/kbd.c wraps it as a con.h server. Input
+    can now come from the serial line OR the keyboard: the console server
+    gained a non-blocking CON_POLL op and watches every input source in a
+    yield loop, so the same shell is driven from a serial terminal and a
+    local keyboard at once (type on the keyboard, see it on the VGA screen --
+    docs/vga-keyboard-demo.png). No serial line required.
+
+NEXT
+----
+
+M8  Address-space isolation & user mode.
+    Give each task its own page tables and run servers/shell in user mode
+    (ring 3 / EL0 / U-mode). IPC becomes a real syscall trap and the
+    kernel copies message buffers across the protection boundary -- the
+    con.h protocol does not change, only the plumbing beneath it. This is
+    the step that turns "microkernel by structure" into "microkernel with
+    enforced isolation".
+
+M9  Preemptive scheduling.
+    Per-arch timer interrupt (LAPIC / generic timer / CLINT) drives a time
+    slice so a buggy task can no longer hog the CPU. Cooperative yield
+    stays as a fast path. This also enables interrupt-driven input, so the
+    serial and keyboard servers can block on an IRQ instead of polling.
+
+M10 Capabilities / typed endpoints.
+    Replace the flat svc_* registry with per-task capability slots so a
+    task can only message endpoints it was explicitly granted -- the seL4
+    style of authority.
+
+Later: a memory-server task for dynamic allocation, and a second
+filesystem/block server to prove the model scales past console I/O.
+
+DESIGN NOTES
+
+See docs/DESIGN.md for the IPC state machine, the deadlock-freedom
+argument, and the rationale for keeping kprintf hard-wired to the UART.
+EOF
