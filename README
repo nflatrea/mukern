@@ -7,95 +7,19 @@
    \/__/     \/__/     \|__|     \/__/     \|__|     \/__/  
                                       muKern v.0.1.062026
 
-A small microkernel for x86_64, ARMv8-A and RV64. The kernel itself
-provides only three things -- tasks, a scheduler, and synchronous IPC.
-Everything else (the serial, VGA and keyboard drivers, the console, the
-shell) is an ordinary task that talks over messages. On x86_64 the shell
-is a full local console: type on the PS/2 keyboard, see it on the VGA
-text screen -- and the very same shell is reachable over the serial line
-at the same time.
+A minimal microkernel design for x86_64, ARMv8-A and RV64, 
+plus a working proof-of-concept that boots on all three
+and drops you into a tiny shell.
 
-WHAT MAKES IT A MICROKERNEL
-
-The kernel core (kernel/core/) contains no device code at all. Drivers
-are server tasks (kernel/srv/) that own a piece of hardware and answer a
-small message protocol (con.h). A client -- the shell -- only ever sends
-messages; it has no idea whether its bytes reach a UART, a screen, or a
-keyboard:
-
-    shell  --con.h-->  console server  --con.h-->  serial driver  (in+out)
-                                       |--con.h-->  vga driver     (out)
-                                       \--con.h-->  keyboard driver (in)
-
-Output is fanned to serial and the screen; input is gathered from serial
-and the keyboard, whichever types first. The call graph is acyclic, so
-the blocking-rendezvous IPC can never deadlock. Scheduling is
-cooperative: control follows the message.
-
-Today every task shares one address space and runs privileged; per-task
-address spaces, user mode and trap-based syscalls are the next milestone
-(see ROADMAP). Even so the *structure* is already a microkernel: the
-kernel is policy-free and every driver is a replaceable, scheduled
-server reached only by IPC.
+You can find DESIGN and ROADMAP in docs/
 
 BUILD & RUN
 
 Toolchain setup (rootless container) is in INSTALL. Then:
 
     $ make all              # build all three kernels
-    $ make run-x86_64       # boot in QEMU, serial console (-nographic)
+    $ make run-x86_64       # boot in QEMU
     $ make run-arm64
     $ make run-riscv64
-    $ make demo-vga         # x86_64 with a real VGA display + serial
 
 Quit QEMU with Ctrl-A then x.
-
-    mukern> help
-    commands:
-      help          this list
-      arch          print architecture
-      echo <text>   print text
-      ps            list tasks and their states
-      clear         clear the screen
-      fault         raise a CPU exception (trap demo)
-      panic         call panic() directly
-      halt          stop the cpu
-      exit          terminate the shell task
-
-    mukern> ps
-     tid  state      name
-       0  ready      idle
-       1  dead       init
-       2  recv-wait  serial
-       3  recv-wait  vga
-       4  recv-wait  kbd
-       5  recv-wait  console
-       6  run        shell  <= self
-
-Every keystroke and every character above is a round trip of IPC
-through the console and driver servers. On x86_64 the same output
-appears on the VGA screen and the shell accepts input from the PS/2
-keyboard as well as the serial line, so `make demo-vga` gives you a
-self-contained local console (docs/vga-keyboard-demo.png).
-
-SOURCE LAYOUT
-
-    include/            public interfaces (arch, hal, ipc, task, con, ...)
-    kernel/core/        the kernel: tasks, scheduler, ipc, init, shell, panic
-    kernel/srv/         driver/console SERVER tasks (serial, vga, kbd, console)
-    kernel/lib/         freestanding libc bits + con client + kprintf
-    arch/<arch>/        boot, traps, context switch, raw UART/VGA/KBD back-ends
-
-NOTES
-
-Per-arch boot paths and UARTs:
-
-| arch    | boot path                          | UART                 | load addr  |
-|---------|------------------------------------|----------------------|------------|
-| x86_64  | Multiboot1 to long-mode trampoline | 16550 @ 0x3F8        | 1 MiB      |
-| arm64   | QEMU virt ELF entry (EL1)          | PL011 @ 0x9000000    | 0x40080000 |
-| riscv64 | OpenSBI to S-mode payload          | NS16550 @ 0x10000000 | 0x80200000 |
-
-The x86_64 kernel is linked as ELF64 then re-wrapped to `elf32-i386`
-with `objcopy` so QEMU's Multiboot loader accepts it; the machine code
-is unchanged. VGA text mode lives at the identity-mapped 0xB8000.
