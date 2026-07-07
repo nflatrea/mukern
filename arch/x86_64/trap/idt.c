@@ -24,6 +24,10 @@ void idt_init(void)
     for (int i = 0; i < NUM_STUBS; i++)
         idt_set_gate(i, isr_stub_table[i], KERNEL_CS, IDT_GATE_INT64);
 
+    /* User-invokable software-interrupt gate for system calls (M3c). */
+    extern void isr_syscall(void);
+    idt_set_gate(SYSCALL_VECTOR, (uint64_t)isr_syscall, KERNEL_CS, IDT_GATE_USER);
+
     idtp.limit = (uint16_t)(sizeof(idt) - 1);
     idtp.base  = (uint64_t)&idt;
     __asm__ volatile ("lidt %0" :: "m"(idtp));

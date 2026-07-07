@@ -38,6 +38,11 @@ SECTIONS
         *(.bss .bss.*)
     }
 
+    /* End of the kernel image; the physical frame allocator places its
+     * bitmap here and treats everything below as reserved. */
+    . = ALIGN(4K);
+    kernel_end = .;
+
     /DISCARD/ :
     {
         *(.note .note.*)

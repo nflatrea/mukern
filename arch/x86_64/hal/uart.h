@@ -26,7 +26,8 @@ static inline void arch_uart_init(void)
     outb(UART_COM1 + UART_DATA, 0x03);   /* divisor low  = 3  -> 38400 8N1 */
     outb(UART_COM1 + UART_IER,  0x00);   /* divisor high = 0               */
     outb(UART_COM1 + UART_LCR,  0x03);   /* DLAB=0, 8 bits, no parity, 1stop*/
-    outb(UART_COM1 + UART_FCR,  0xC7);   /* enable+clear FIFO, 14B trigger */
+    outb(UART_COM1 + UART_FCR,  0x01);   /* enable FIFO, 1-byte RX trigger, */
+                                         /* do NOT clear: keep early input  */
     outb(UART_COM1 + UART_MCR,  0x0B);   /* DTR/RTS/OUT2 set               */
 }
 

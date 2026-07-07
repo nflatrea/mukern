@@ -28,7 +28,9 @@ struct trapframe {
 } __attribute__((packed));
 
 #define IDT_GATE_INT64  0x8E            /* present, DPL0, 64-bit interrupt */
+#define IDT_GATE_USER   0xEE            /* present, DPL3, 64-bit interrupt */
 #define KERNEL_CS       0x08
+#define SYSCALL_VECTOR  0x80            /* int 0x80 software syscall       */
 
 void idt_set_gate(int n, uint64_t handler, uint16_t sel, uint8_t flags);
 void idt_init(void);

@@ -426,3 +426,13 @@ isr_stub_table:
     .quad isr_45
     .quad isr_46
     .quad isr_47
+
+/* ---- M3c: software syscall entry (int 0x80). Same frame shape as the
+ * generated stubs (no CPU error code, so push a dummy), reusing isr_common
+ * so the dispatcher sees a normal struct trapframe. ---- */
+.global isr_syscall
+.type isr_syscall, @function
+isr_syscall:
+    pushq $0                 /* dummy error code */
+    pushq $0x80              /* vector */
+    jmp isr_common

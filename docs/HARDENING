@@ -1,0 +1,59 @@
+muKern - Hardening Interlude (Phase 5.5)
+========================================
+
+Before the Phase 6 ports, we pay down the security/robustness debt accumulated
+while standing up the user-space servers. Each item below is a milestone landed
+as its own bisectable commit that builds and boots in QEMU, verified with the
+same format-patch -> git am -> boot loop used in Phases 2-5. The kernel stays
+mechanism-only and under 5,000 lines; everything else is policy in servers/.
+
+ADDRESSED IN THIS PATCH
+-----------------------
+
+H1: Capability-gated hardware I/O
+    Port I/O was unrestricted (any Ring 3 thread could SYS_OUTB to any port).
+    Add a CAP_IOPORT capability carrying an allowed [base,len) port range.
+    SYS_OUTB/SYS_INB/SYS_INW now require the caller to hold a covering cap.
+    init (the root task, tid 0) is the only thread permitted to grant ranges
+    (SYS_GRANT_IO); it hands the UART to the console driver and the ATA ports
+    to the block driver during their startup handshake. A thread without the
+    capability is denied.
+
+H2: Pager policy + fault isolation (+ slot reclamation)
+    The pager mapped *any* faulting address (a zero-page-on-demand oracle).
+    It now validates the address against a registered region; an out-of-bounds
+    fault is a policy decision to KILL the offending process. The kernel kills
+    on the pager's verdict (returned with the fault reply), the faulting thread
+    is torn down, and the rest of the system keeps running - demonstrating
+    fault isolation. Dead thread slots are reclaimed so tids/stacks are reused.
+
+DEFERRED (sketched for Phase 6+)
+--------------------------------
+
+H3: Per-process address spaces. A private PML4 per process; switch CR3 on
+    context switch and on cross-space IPC. This is the big one: it breaks the
+    current shared-address-space shortcut where servers read each other's
+    buffers by raw pointer, so it must land together with H4. Its own phase.
+
+H4: Zero-copy shared memory by grant. Replace raw pointer passing with explicit
+    shared regions delegated through a memory capability in the IPC message
+    (the DESIGN's "map a shared buffer via a capability" path). Prerequisite
+    for H3 so drivers/FS can still move bulk data without a private-AS copy.
+
+H5: Interrupt forwarding. Drivers currently poll. Add the DESIGN's mechanism:
+    a driver registers for an IRQ, the kernel masks it and forwards each
+    interrupt as an IPC to the driver thread, which acks to re-unmask. Converts
+    the console/block drivers to interrupt-driven and enables input devices.
+
+H6: Name service. Replace the well-known-tid-by-spawn-order convention with a
+    registry server: servers register a name, clients look it up. Removes the
+    fragile fixed boot ordering.
+
+H7: Filesystem maturity. Directories, multiple files, partial/seeked reads,
+    writes, and a block cache in fs_server (still no kernel involvement).
+
+H8: Full resource accounting. Per-process frame ownership tracked at map time
+    and reclaimed on exit/kill. Depends on H3's private address spaces.
+
+This ordering front-loads the cheap, high-value isolation wins (H1/H2) and
+groups the expensive, entangled work (H3/H4/H8) so it can be done coherently.

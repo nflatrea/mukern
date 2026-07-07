@@ -449,14 +449,3 @@ For payloads >3 words (e.g., file data, network packets):
     Reply: Server replies with Label=OK, arg1=bytes_written.
 
 The kernel never touches the large payload; it only manages the capabilities that allow the mapping.
-
-7. Implementation Checklist
-
-To implement this in your roadmap (Phase 3):
-
-    [ ] Define struct message_regs: Map architecture registers to a C struct.
-    [ ] Implement sys_ipc_send_recv: Handle the rendezvous logic (block if no partner, switch if partner exists).
-    [ ] Implement sys_ipc_wait: Mark thread as waiting and check for blocked senders.
-    [ ] Context Switch Integration: Modify switch_to() to accept a "message copy" flag to transfer register contents between threads.
-    [ ] Capability Logic: Add code to move capability table entries during IPC if the "HasCap" flag is set.
-    [ ] Timeout Handling: Implement a timer check to unblock threads if the partner doesn't arrive.

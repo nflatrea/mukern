@@ -1,0 +1,25 @@
+    ___       ___       ___       ___       ___       ___   
+   /\__\     /\__\     /\__\     /\  \     /\  \     /\__\  
+  /::L_L_   /:/ _/_   /:/ _/_   /::\  \   /::\  \   /:| _|_ 
+ /:/L:\__\ /:/_/\__\ /::-"\__\ /::\:\__\ /::\:\__\ /::|/\__\
+ \/_/:/  / \:\/:/  / \;:;-",-" \:\:\/  / \;:::/  / \/|::/  /
+   /:/  /   \::/  /   |:|  |    \:\/  /   |:\/__/    |:/  / 
+   \/__/     \/__/     \|__|     \/__/     \|__|     \/__/  
+                                      muKern v.0.1.062026
+
+A minimal microkernel design for x86_64, ARMv8-A and RV64, 
+plus a working proof-of-concept that boots on all three
+and drops you into a tiny shell.
+
+You can find DESIGN and ROADMAP in docs/
+
+BUILD & RUN
+
+Toolchain setup (rootless container) is in INSTALL. Then:
+
+    $ make all              # build all three kernels
+    $ make run-x86_64       # boot in QEMU
+    $ make run-arm64
+    $ make run-riscv64
+
+Quit QEMU with Ctrl-A then x.

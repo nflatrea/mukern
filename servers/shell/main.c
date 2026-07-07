@@ -1,0 +1,172 @@
+/* servers/shell/main.c - a tiny interactive shell (system test harness).
+ *
+ * A user-space REPL that reads a line from the console driver and dispatches to
+ * builtins, each exercising a different part of the system: the FS server
+ * (ls/cat) which in turn drives the block driver and disk, the process manager
+ * (run), and read-only kernel introspection (ps/mem/uptime). Everything is IPC.
+ */
+#include "usys.h"
+
+static int streq(const char *a, const char *b)
+{
+    while (*a && *a == *b) { a++; b++; }
+    return *a == *b;
+}
+
+/* Split "cmd args..." in place: NUL-terminate cmd, return pointer to args. */
+static char *split(char *line)
+{
+    char *p = line;
+    while (*p && *p != ' ') p++;
+    if (*p == ' ') { *p = 0; return p + 1; }
+    return p;                                   /* points at the NUL */
+}
+
+static void cmd_help(void)
+{
+    con_puts(
+        "muKern shell -- commands:\n"
+        "  help          show this help\n"
+        "  echo <text>   print text\n"
+        "  ls            list files on the disk (fs server)\n"
+        "  cat <file>    print a file's contents\n"
+        "  run           spawn the hello program via the process manager\n"
+        "  vga <text>    print text on the VGA display\n"
+        "  ps            list live threads and their state\n"
+        "  mem           show physical memory usage\n"
+        "  uptime        show time since boot\n"
+        "  clear         clear the screen\n"
+        "  exit          shut down the shell\n"
+        "line editing: arrows move/recall history, Home/End, Del,\n"
+        "              Ctrl-A/E (line ends), Ctrl-U (clear), Ctrl-C (cancel)\n");
+}
+
+static void cmd_ls(void)
+{
+    static char buf[512];
+    struct ipc_msg m = { .label = MSG_LIST, .data0 = (unsigned long)buf,
+                         .data1 = sizeof buf };
+    struct ipc_msg r;
+    u_send(FS_TID, &m);
+    u_recv(FS_TID, &r);
+    con_write(buf, (unsigned)r.data0);
+}
+
+static void cmd_cat(const char *name)
+{
+    if (!*name) { con_puts("usage: cat <file>\n"); return; }
+    struct ipc_msg om = { .label = MSG_OPEN, .data0 = (unsigned long)name };
+    struct ipc_msg orep;
+    u_send(FS_TID, &om);
+    u_recv(FS_TID, &orep);
+    if ((long)orep.data0 < 0) {
+        con_puts("cat: no such file: "); con_puts(name); con_puts("\n");
+        return;
+    }
+    static unsigned char fb[2048];
+    struct ipc_msg rm = { .label = MSG_FREAD, .data0 = orep.data0,
+                          .data1 = (unsigned long)fb, .cap = sizeof fb };
+    struct ipc_msg rrep;
+    u_send(FS_TID, &rm);
+    u_recv(FS_TID, &rrep);
+    con_write((const char *)fb, (unsigned)rrep.data0);
+
+    struct ipc_msg cm = { .label = MSG_CLOSE, .data0 = orep.data0 };  /* release handle */
+    struct ipc_msg crep;
+    u_send(FS_TID, &cm);
+    u_recv(FS_TID, &crep);
+}
+
+static void cmd_run(void)
+{
+    struct ipc_msg sp = { .label = MSG_SPAWN, .data0 = PROG_HELLO };
+    struct ipc_msg r;
+    u_send(PM_TID, &sp);
+    u_recv(PM_TID, &r);
+    con_puts("spawned hello as tid "); con_putu(r.data0); con_puts("\n");
+}
+
+static void cmd_ps(void)
+{
+    static const char *nm[] = { "init", "console", "block", "vm", "pm", "fs",
+                                "vga", "shell" };
+    static const char *st[] = { "unused", "runnable", "running", "blocked", "dead" };
+    for (int t = 0; t < 16; t++) {
+        long s = u_tinfo(t);
+        if (s < 1 || s > 3) continue;           /* show live threads only */
+        con_puts("  tid "); con_putu((unsigned long)t);
+        con_puts(" "); con_puts(st[s]);
+        if (t < 8) { con_puts(" ("); con_puts(nm[t]); con_puts(")"); }
+        con_puts("\n");
+    }
+}
+
+static void cmd_mem(void)
+{
+    unsigned long fr = u_meminfo(0), tot = u_meminfo(1);
+    con_puts("frames: "); con_putu(fr); con_puts(" free / ");
+    con_putu(tot); con_puts(" total ("); con_putu(fr * 4); con_puts(" KiB free)\n");
+}
+
+static void cmd_uptime(void)
+{
+    unsigned long t = u_uptime();
+    con_puts("uptime: "); con_putu(t); con_puts(" ticks (");
+    con_putu(t / 100); con_puts(" s)\n");
+}
+
+int main(void)
+{
+    struct ipc_msg ready = { .label = MSG_READY };
+    u_send(0, &ready);
+    struct ipc_msg go; u_recv(0, &go);              /* receive our capabilities */
+
+    /* The shell holds caps to console/fs/pm/vga but NOT to the block driver;
+     * prove that the kernel refuses an un-capable send. */
+    struct ipc_msg probe = { .label = MSG_READY };
+    if (u_send(BLK_TID, &probe) != 0)
+        con_puts("[shell] IPC to block driver refused (no capability) - good\n");
+
+    con_puts("   ___       ___       ___       ___       ___       ___    \n"
+             "  /\\__\\     /\\__\\     /\\__\\     /\\  \\     /\\  \\     /\\__\\      \n"
+             " /::L_L_   /:/ _/_   /:/ _/_   /::\\  \\   /::\\  \\   /:| _|_             \n"
+             "/:/L:\\__\\ /:/_/\\__\\ /::-\"\\__\\ /::\\:\\__\\ /::\\:\\__\\ /::|/\\__\\ \n"
+             "\\/_/:/  / \\:\\/:/  / \\;:;-\",-\" \\:\\:\\/  / \\;:::/  / \\/|::/  /     \n"
+             "  /:/  /   \\::/  /   |:|  |    \\:\\/  /   |:\\/__/    |:/  /             \n"
+             "  \\/__/     \\/__/     \\|__|     \\/__/     \\|__|     \\/__/            \n"
+             "                                     muKern v.0.1.062026                   \n"
+             "\n"
+             "A minimal microkernel design for x86_64, ARMv8-A and RV64,                 \n" 
+             "plus a working proof-of-concept that boots on all three                    \n" 
+             "and drops you into a tiny shell.                                           \n");
+
+    con_puts("\nmuKern shell -- type 'help'\n");
+    for (;;) {
+        con_puts("mukern $ ");
+        char line[128];
+        unsigned n = con_readline(line, sizeof line);
+        if (n == 0) continue;
+        char *args = split(line);
+
+        if      (streq(line, "help"))   cmd_help();
+        else if (streq(line, "echo"))   { con_puts(args); con_puts("\n"); }
+        else if (streq(line, "ls"))     cmd_ls();
+        else if (streq(line, "cat"))    cmd_cat(args);
+        else if (streq(line, "run"))    cmd_run();
+        else if (streq(line, "ps"))     cmd_ps();
+        else if (streq(line, "mem"))    cmd_mem();
+        else if (streq(line, "uptime")) cmd_uptime();
+        else if (streq(line, "vga")) {
+            struct ipc_msg vm = { .label = MSG_VPUTS, .data0 = (unsigned long)args,
+                                  .data1 = 13 };
+            struct ipc_msg vr;
+            u_send(VGA_TID, &vm);
+            u_recv(VGA_TID, &vr);
+            con_puts("(printed to VGA display)\n");
+        }
+        else if (streq(line, "clear"))  con_puts("\033[2J\033[H");
+        else if (streq(line, "exit"))   { con_puts("bye\n"); break; }
+        else { con_puts("unknown: "); con_puts(line); con_puts(" (try help)\n"); }
+    }
+    return 0;
+}

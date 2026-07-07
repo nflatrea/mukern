@@ -157,6 +157,5 @@ M6c: Crash Recovery
         Success Criteria: The init or monitor server detects the death and restarts the 
         driver without rebooting the kernel.
 
-Start with Phase 1 on x86_64. Do not attempt to support multiple architectures until Phase 6. 
-Keep the kernel code in kernel/ strictly under 5,000 lines. 
+Tips : Keep the kernel code in kernel/ strictly under 5,000 lines. 
 If you find yourself adding logic there, stop and move it to servers/. 

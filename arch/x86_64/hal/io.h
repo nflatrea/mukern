@@ -14,6 +14,13 @@ static inline uint8_t inb(uint16_t port)
     return r;
 }
 
+static inline uint16_t inw(uint16_t port)
+{
+    uint16_t r;
+    __asm__ volatile ("inw %1, %0" : "=a"(r) : "Nd"(port));
+    return r;
+}
+
 /* Short delay by bouncing a byte off an unused port (POST diagnostic 0x80). */
 static inline void io_wait(void)
 {
